@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NYC Live Subway</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #05070a;
+        overflow: hidden;
+      }
+      canvas {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+      }
+      #hud {
+        position: fixed;
+        left: 16px;
+        bottom: 14px;
+        color: #4a5568;
+        font: 12px/1.4 ui-monospace, "SF Mono", Menlo, monospace;
+        user-select: none;
+        pointer-events: none;
+      }
+      #hud .title {
+        color: #8a97a8;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="map"></canvas>
+    <div id="hud"><span class="title">NYC Subway · Live</span><br /><span id="status">connecting…</span></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
