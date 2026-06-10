@@ -11,5 +11,5 @@
     "noEmit": true,
     "types": ["node", "geojson"]
   },
-  "include": ["scripts", "server", "web/src", "shared"]
+  "include": ["scripts", "web/src", "shared"]
 }

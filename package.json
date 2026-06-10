@@ -3,28 +3,24 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Ambient live map of the NYC subway: realtime train positions interpolated from MTA GTFS-RT feeds.",
+  "description": "Ambient live map of the NYC subway: realtime train positions interpolated from MTA GTFS-RT feeds, fully static.",
   "scripts": {
     "preprocess": "tsx scripts/preprocess.ts",
-    "dev:server": "tsx watch server/index.ts",
-    "dev:web": "vite web",
-    "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev": "vite web",
     "build": "vite build web",
-    "start": "NODE_ENV=production tsx server/index.ts",
+    "preview": "vite preview web",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "adm-zip": "^0.5.17",
-    "csv-parse": "^6.2.1",
-    "express": "^5.2.1",
     "gtfs-realtime-bindings": "^2.0.0"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.8",
-    "@types/express": "^5.0.6",
     "@types/geojson": "^7946.0.16",
     "@types/node": "^25.9.2",
-    "concurrently": "^10.0.3",
+    "adm-zip": "^0.5.17",
+    "csv-parse": "^6.2.1",
+    "puppeteer-core": "^25.1.0",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
     "vite": "^8.0.16"

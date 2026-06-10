@@ -12,14 +12,12 @@ import { cumulativeDist, projectOntoPolyline, simplify, type LonLat } from "../s
 import type { RouteInfo, ShapeInfo, StationInfo } from "../shared/types.js";
 
 const GTFS_URL = "https://rrgtfsfeeds.s3.amazonaws.com/gtfs_subway.zip";
-const BOROUGHS_URL =
-  "https://services5.arcgis.com/GfwWNkhOj9bNBqoJ/arcgis/rest/services/NYC_Borough_Boundary/FeatureServer/0/query?where=1%3D1&outFields=BoroName&outSR=4326&f=geojson";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const CACHE_DIR = path.join(ROOT, ".cache");
-const DATA_DIR = path.join(ROOT, "data");
+// served as static assets by Vite (dev) and copied into the build output
+const DATA_DIR = path.join(ROOT, "web", "public", "data");
 const SHAPE_TOLERANCE_M = 8;
-const BOROUGH_TOLERANCE_M = 40;
 // Staten Island Railway excluded by design (see project decisions)
 const EXCLUDED_ROUTES = new Set(["SI", "SIR"]);
 
@@ -146,21 +144,6 @@ async function main() {
   const usedStationsObj: Record<string, StationInfo> = {};
   for (const id of [...usedStations].sort()) usedStationsObj[id] = stations[id];
 
-  // --- borough outlines (best-effort; map still works without them) ---
-  let boroughs: any = { type: "FeatureCollection", features: [] };
-  try {
-    const geo = JSON.parse((await download(BOROUGHS_URL, "boroughs.geojson")).toString());
-    boroughs.features = geo.features
-      .filter((f: any) => !/staten/i.test(f.properties?.BoroName ?? f.properties?.boro_name ?? ""))
-      .map((f: any) => ({
-        type: "Feature",
-        properties: { name: f.properties?.BoroName ?? f.properties?.boro_name ?? "" },
-        geometry: simplifyGeometry(f.geometry),
-      }));
-  } catch (err) {
-    console.warn(`borough boundaries unavailable (${err}); continuing without them`);
-  }
-
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const write = (name: string, obj: unknown) => {
     const file = path.join(DATA_DIR, name);
@@ -170,27 +153,7 @@ async function main() {
   write("routes.json", routes);
   write("stations.json", usedStationsObj);
   write("shapes.json", shapes);
-  write("boroughs.json", boroughs);
   console.log(`done: ${shapes.length} shapes, ${usedStations.size} stations`);
-}
-
-function simplifyGeometry(geom: any): any {
-  const simplifyRing = (ring: number[][]) => {
-    const pts = simplify(ring.map(([lon, lat]): LonLat => [lon, lat]), BOROUGH_TOLERANCE_M);
-    return pts.map(([lon, lat]) => [round6(lon), round6(lat)]);
-  };
-  if (geom.type === "Polygon") {
-    return { type: "Polygon", coordinates: geom.coordinates.map(simplifyRing) };
-  }
-  if (geom.type === "MultiPolygon") {
-    return {
-      type: "MultiPolygon",
-      coordinates: geom.coordinates.map((poly: number[][][]) =>
-        poly.map(simplifyRing).filter((r: number[][]) => r.length >= 4)
-      ),
-    };
-  }
-  return geom;
 }
 
 main().catch((err) => {

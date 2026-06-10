@@ -9,33 +9,127 @@
       body {
         margin: 0;
         height: 100%;
-        background: #05070a;
+        background: #eceef0;
         overflow: hidden;
       }
       canvas {
         display: block;
         width: 100vw;
         height: 100vh;
+        cursor: grab;
+        touch-action: none;
+      }
+      :root {
+        --hud-text: #8b94a0;
+        --hud-title: #5b6675;
+        --ctl-bg: #ffffff;
+        --ctl-border: #d5dbe1;
+        --ctl-text: #5b6675;
+        --ctl-hover-bg: #f0f2f4;
+        --ctl-hover-text: #2c3540;
+      }
+      body.theme-dark {
+        --hud-text: #4a5568;
+        --hud-title: #8a97a8;
+        --ctl-bg: #11161d;
+        --ctl-border: #232c38;
+        --ctl-text: #8a97a8;
+        --ctl-hover-bg: #1a222d;
+        --ctl-hover-text: #c6d0dc;
       }
       #hud {
         position: fixed;
         left: 16px;
         bottom: 14px;
-        color: #4a5568;
+        color: var(--hud-text);
         font: 12px/1.4 ui-monospace, "SF Mono", Menlo, monospace;
         user-select: none;
         pointer-events: none;
       }
       #hud .title {
-        color: #8a97a8;
+        color: var(--hud-title);
         letter-spacing: 0.08em;
         text-transform: uppercase;
+      }
+      #zoomctl {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        display: flex;
+        flex-direction: column;
+        background: var(--ctl-bg);
+        border: 1px solid var(--ctl-border);
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 1px 4px rgba(10, 15, 20, 0.18);
+      }
+      #zoomctl button {
+        width: 38px;
+        height: 38px;
+        border: none;
+        background: transparent;
+        color: var(--ctl-text);
+        font: 20px/1 ui-monospace, Menlo, monospace;
+        cursor: pointer;
+      }
+      #zoomctl button:hover {
+        background: var(--ctl-hover-bg);
+        color: var(--ctl-hover-text);
+      }
+      #zoomctl button + button {
+        border-top: 1px solid var(--ctl-border);
+      }
+      #themectl {
+        position: fixed;
+        right: 16px;
+        bottom: 104px;
+        display: flex;
+        background: var(--ctl-bg);
+        border: 1px solid var(--ctl-border);
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 1px 4px rgba(10, 15, 20, 0.18);
+      }
+      #themectl button {
+        border: none;
+        background: transparent;
+        color: var(--ctl-text);
+        font: 11px/1 ui-monospace, Menlo, monospace;
+        padding: 9px 10px;
+        cursor: pointer;
+        letter-spacing: 0.04em;
+      }
+      #themectl button:hover {
+        background: var(--ctl-hover-bg);
+        color: var(--ctl-hover-text);
+      }
+      #themectl button.active {
+        background: var(--ctl-hover-bg);
+        color: var(--ctl-hover-text);
+        font-weight: 700;
+      }
+      #themectl button + button {
+        border-left: 1px solid var(--ctl-border);
       }
     </style>
   </head>
   <body>
     <canvas id="map"></canvas>
-    <div id="hud"><span class="title">NYC Subway · Live</span><br /><span id="status">connecting…</span></div>
+    <div id="themectl">
+      <button data-theme="dusk">dusk</button>
+      <button data-theme="dark">dark</button>
+      <button data-theme="light">light</button>
+    </div>
+    <div id="zoomctl">
+      <button id="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+      <button id="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+    </div>
+    <div id="hud">
+      <span class="title">NYC Subway · Live</span><br />
+      <span id="status">connecting…</span><br />
+      <span style="opacity: 0.55">scroll to zoom · drag to pan · double-click to reset</span><br />
+      <span style="opacity: 0.4" id="attribution">© OpenStreetMap © CARTO</span>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

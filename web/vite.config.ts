@@ -1,11 +1,9 @@
 import { defineConfig } from "vite";
 
 export default defineConfig({
+  // relative base so the site works from any subpath (e.g. GitHub Pages)
+  base: "./",
   server: {
-    proxy: {
-      "/api": "http://localhost:4000",
-      "/data": "http://localhost:4000",
-    },
     fs: { allow: [".."] },
   },
   build: { outDir: "dist" },
