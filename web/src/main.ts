@@ -367,8 +367,9 @@ async function main() {
     return lonLatToWorld(lon, lat);
   }
 
-  // the City Hall pocket (WTC / Fulton / Park Row) where all the lines cross
-  const INTRO_BOX = { minLon: -74.016, maxLon: -73.998, minLat: 40.704, maxLat: 40.716 };
+  // the Midtown pocket (Penn / Times Sq / Bryant Park / Herald Sq) where the
+  // 8th/7th/Broadway/6th Ave trunks and the 7 + shuttle all cross
+  const INTRO_BOX = { minLon: -74.0, maxLon: -73.975, minLat: 40.744, maxLat: 40.762 };
 
   /** Fastest moving train in the intro box (fallback: nearest-ish fast train). */
   function pickIntroTrain(): string | null {
