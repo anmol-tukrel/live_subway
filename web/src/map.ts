@@ -197,10 +197,12 @@ export class TileLayer {
 
   draw(ctx: CanvasRenderingContext2D, view: MapView): void {
     const scale = view.scalePx;
-    // include dpr so retina screens get tiles at native resolution
+    // include dpr (capped at 2: @2x-density tiles are sharp enough on 3x
+    // phones and need 2.25x fewer tiles) so retina screens get crisp tiles
+    const dprEff = Math.min(view.dpr, 2);
     const zt = Math.max(
       8,
-      Math.min(this.theme.tileMaxZoom, Math.round(Math.log2((scale * view.dpr) / 256)))
+      Math.min(this.theme.tileMaxZoom, Math.round(Math.log2((scale * dprEff) / 256)))
     );
     const n = 1 << zt;
     const [wl, wt] = view.screenToWorld(0, 0);
@@ -209,7 +211,9 @@ export class TileLayer {
     const x1 = Math.min(n - 1, Math.floor(wr * n));
     const y0 = Math.max(0, Math.floor(wt * n));
     const y1 = Math.min(n - 1, Math.floor(wb * n));
-    if ((x1 - x0 + 1) * (y1 - y0 + 1) > 80) return; // sanity guard
+    // sanity guard against runaway tile counts; a 2x viewport legitimately
+    // needs ~(w/128+1)*(h/128+1) tiles, so allow generous headroom
+    if ((x1 - x0 + 1) * (y1 - y0 + 1) > 360) return;
 
     const size = scale / n;
     for (let x = x0; x <= x1; x++) {
@@ -290,9 +294,9 @@ export class TileLayer {
     };
     img.src = this.theme.tileUrl(z, x, y);
     // bounded cache: evict oldest entries (multiple zoom levels stay warm)
-    if (this.cache.size > 700) {
+    if (this.cache.size > 900) {
       for (const k of this.cache.keys()) {
-        if (this.cache.size <= 500) break;
+        if (this.cache.size <= 700) break;
         this.cache.delete(k);
       }
     }
