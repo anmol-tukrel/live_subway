@@ -13,8 +13,8 @@ import {
   type PreparedShape,
 } from "./map";
 
-// default framing: lower Manhattan / LES + Williamsburg Bridge
-const DEFAULT_VIEW = { lon: -73.983, lat: 40.7155, z: 11.5 };
+// default framing: lower Manhattan centered, Hudson River on the left
+const DEFAULT_VIEW = { lon: -74.008, lat: 40.7155, z: 11.5 };
 
 const POLL_MS = 30_000; // MTA publishes ~every 30s; we fetch the feeds directly
 const SMOOTHING = 2.5; // 1/s; position easing for shapeless fallback trains
