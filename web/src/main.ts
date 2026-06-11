@@ -44,37 +44,48 @@ const canvas = document.getElementById("map") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
 const statusEl = document.getElementById("status")!;
 
-// --- train marker: classic front-view subway glyph (rounded body, two
-// windows, two headlights), drawn as vector art once per route color ---
+// --- train marker: the official MTA route bullet — a colored disc with the
+// line's letter/number (diamond for the <6X>/<7X> express variants) ---
 const SPRITE_S = 96;
 const spriteCache = new Map<string, HTMLCanvasElement>();
-function trainSprite(color: string): HTMLCanvasElement {
-  let c = spriteCache.get(color);
+// the yellow Broadway lines use black text on their bullets
+const BLACK_TEXT = new Set(["N", "Q", "R", "W"]);
+function routeLabel(routeId: string): string {
+  if (routeId === "GS" || routeId === "FS" || routeId === "H") return "S"; // shuttles
+  return routeId.replace(/X$/, "");
+}
+function trainSprite(routeId: string, color: string): HTMLCanvasElement {
+  let c = spriteCache.get(routeId);
   if (c) return c;
   c = document.createElement("canvas");
   c.width = SPRITE_S;
   c.height = SPRITE_S;
   const g = c.getContext("2d")!;
-  // body: big-shouldered top, gently rounded bottom
+  const cx = SPRITE_S / 2;
+  const cy = SPRITE_S / 2;
   g.beginPath();
-  g.roundRect(14, 8, 68, 80, [26, 26, 14, 14]);
+  if (routeId.endsWith("X")) {
+    // express services ride in a diamond
+    g.moveTo(cx, cy - 45);
+    g.lineTo(cx + 45, cy);
+    g.lineTo(cx, cy + 45);
+    g.lineTo(cx - 45, cy);
+    g.closePath();
+  } else {
+    g.arc(cx, cy, 41, 0, Math.PI * 2);
+  }
   g.fillStyle = color;
   g.fill();
-  g.lineWidth = 6;
+  g.lineWidth = 5;
   g.strokeStyle = "rgba(255,255,255,0.92)";
   g.stroke();
-  // two cab windows
-  g.fillStyle = "rgba(255,255,255,0.94)";
-  g.beginPath();
-  g.roundRect(26, 26, 19, 22, 4);
-  g.roundRect(51, 26, 19, 22, 4);
-  g.fill();
-  // headlights
-  g.beginPath();
-  g.arc(33, 68, 6, 0, Math.PI * 2);
-  g.arc(63, 68, 6, 0, Math.PI * 2);
-  g.fill();
-  spriteCache.set(color, c);
+  const label = routeLabel(routeId);
+  g.fillStyle = BLACK_TEXT.has(label) ? "#0a0a0a" : "#ffffff";
+  g.font = "bold 52px 'Helvetica Neue', Helvetica, Arial, sans-serif";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillText(label, cx, cy + 4);
+  spriteCache.set(routeId, c);
   return c;
 }
 
@@ -565,11 +576,17 @@ async function main() {
         }
       }
 
-      // front-view subway glyph, always upright (the trail shows direction)
+      // MTA route bullet, always upright (the trail shows direction)
       const S = dotR * 3.1;
       ctx.shadowColor = color;
       ctx.shadowBlur = 6;
-      ctx.drawImage(trainSprite(color), head[0] - S / 2, head[1] - S / 2, S, S);
+      ctx.drawImage(
+        trainSprite(t.state.routeId, color),
+        head[0] - S / 2,
+        head[1] - S / 2,
+        S,
+        S
+      );
       ctx.shadowBlur = 0;
     }
 
