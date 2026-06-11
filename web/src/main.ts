@@ -577,7 +577,7 @@ async function main() {
       }
 
       // MTA route bullet, always upright (the trail shows direction)
-      const S = dotR * 3.1;
+      const S = dotR * 4;
       ctx.shadowColor = color;
       ctx.shadowBlur = 6;
       ctx.drawImage(
