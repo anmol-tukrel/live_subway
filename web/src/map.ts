@@ -101,6 +101,13 @@ export class MapView {
     this.bounds = { minX, minY, maxX, maxY };
     this.cx = (minX + maxX) / 2;
     this.cy = (minY + maxY) / 2;
+    // zoom is defined against a fixed reference viewport (the desktop window
+    // the styling was tuned on), so a given zoom level means the same ground
+    // scale — and the same line/dot proportions — on every device
+    const REF_W = 1512;
+    const REF_H = 860;
+    const pad = 1.1;
+    this.baseScale = Math.min(REF_W / ((maxX - minX) * pad), REF_H / ((maxY - minY) * pad));
   }
 
   /** pixels per world unit */
@@ -112,9 +119,6 @@ export class MapView {
     this.width = width;
     this.height = height;
     this.dpr = dpr;
-    const { minX, maxX, minY, maxY } = this.bounds;
-    const pad = 1.1;
-    this.baseScale = Math.min(width / ((maxX - minX) * pad), height / ((maxY - minY) * pad));
   }
 
   project(lon: number, lat: number): [number, number] {
@@ -138,7 +142,7 @@ export class MapView {
   /** Zoom by `factor`, keeping the map point under (px, py) fixed. */
   zoomAt(px: number, py: number, factor: number): void {
     const [wx, wy] = this.screenToWorld(px, py);
-    this.zoom = Math.max(1, Math.min(64, this.zoom * factor));
+    this.zoom = Math.max(0.5, Math.min(64, this.zoom * factor));
     this.cx = wx - (px - this.width / 2) / this.scalePx;
     this.cy = wy - (py - this.height / 2) / this.scalePx;
     this.clampCenter();
@@ -151,7 +155,7 @@ export class MapView {
   }
 
   setView(lon: number, lat: number, zoom: number): void {
-    this.zoom = Math.max(1, Math.min(64, zoom));
+    this.zoom = Math.max(0.5, Math.min(64, zoom));
     this.cx = lonToWorldX(lon);
     this.cy = latToWorldY(lat);
     this.clampCenter();
@@ -178,7 +182,11 @@ export class TileLayer {
 
   draw(ctx: CanvasRenderingContext2D, view: MapView): void {
     const scale = view.scalePx;
-    const zt = Math.max(8, Math.min(this.theme.tileMaxZoom, Math.round(Math.log2(scale / 256))));
+    // include dpr so retina screens get tiles at native resolution
+    const zt = Math.max(
+      8,
+      Math.min(this.theme.tileMaxZoom, Math.round(Math.log2((scale * view.dpr) / 256)))
+    );
     const n = 1 << zt;
     const [wl, wt] = view.screenToWorld(0, 0);
     const [wr, wb] = view.screenToWorld(view.width, view.height);

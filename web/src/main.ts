@@ -13,8 +13,12 @@ import {
   type PreparedShape,
 } from "./map";
 
-// default framing: lower Manhattan centered, Hudson River on the left
-const DEFAULT_VIEW = { lon: -74.008, lat: 40.7155, z: 11.5 };
+// default framing: lower Manhattan centered, Hudson River on the left.
+// portrait screens get a wider framing tuned for a phone's aspect ratio.
+const DESKTOP_VIEW = { lon: -74.008, lat: 40.7155, z: 11.5 };
+const PORTRAIT_VIEW = { lon: -74.0, lat: 40.72, z: 6 };
+const defaultView = () =>
+  window.innerWidth < window.innerHeight ? PORTRAIT_VIEW : DESKTOP_VIEW;
 
 const POLL_MS = 30_000; // MTA publishes ~every 30s; we fetch the feeds directly
 const SMOOTHING = 2.5; // 1/s; position easing for shapeless fallback trains
@@ -141,7 +145,8 @@ async function main() {
   document.getElementById("zoom-out")!.addEventListener("click", () => zoomStep(1 / 1.6));
 
   const resetView = () => {
-    view.setView(DEFAULT_VIEW.lon, DEFAULT_VIEW.lat, DEFAULT_VIEW.z);
+    const dv = defaultView();
+    view.setView(dv.lon, dv.lat, dv.z);
     staticDirty = true;
   };
   canvas.addEventListener("dblclick", resetView);
@@ -432,10 +437,11 @@ async function main() {
   // URL overrides the Manhattan default, e.g. /?lon=-73.99&lat=40.72&z=8
   const params = new URLSearchParams(location.search);
   const pz = Number(params.get("z"));
+  const dv = defaultView();
   view.setView(
-    Number(params.get("lon")) || DEFAULT_VIEW.lon,
-    Number(params.get("lat")) || DEFAULT_VIEW.lat,
-    pz > 1 ? pz : DEFAULT_VIEW.z
+    Number(params.get("lon")) || dv.lon,
+    Number(params.get("lat")) || dv.lat,
+    pz > 0.5 ? pz : dv.z
   );
   staticDirty = true;
   window.addEventListener("resize", layout);
