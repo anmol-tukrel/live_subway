@@ -94,6 +94,7 @@ async function main() {
     document.body.classList.toggle("theme-light", !theme.darkUI);
     document.body.style.background = theme.bg;
     document.getElementById("attribution")!.textContent = theme.attribution;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme.bg);
     document.querySelectorAll<HTMLButtonElement>("#themectl button").forEach((b) => {
       b.classList.toggle("active", b.dataset.theme === theme.id);
     });
@@ -111,9 +112,12 @@ async function main() {
 
   function layout() {
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(window.innerWidth * dpr);
-    canvas.height = Math.round(window.innerHeight * dpr);
-    view.fit(window.innerWidth, window.innerHeight, dpr);
+    // clientWidth/Height follow the CSS dvh sizing (mobile URL bar show/hide)
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    view.fit(w, h, dpr);
     staticDirty = true;
   }
 
@@ -130,37 +134,82 @@ async function main() {
     { passive: false }
   );
   const zoomStep = (factor: number) => {
-    view.zoomAt(window.innerWidth / 2, window.innerHeight / 2, factor);
+    view.zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, factor);
     staticDirty = true;
   };
   document.getElementById("zoom-in")!.addEventListener("click", () => zoomStep(1.6));
   document.getElementById("zoom-out")!.addEventListener("click", () => zoomStep(1 / 1.6));
-  let dragging = false;
-  let lastX = 0;
-  let lastY = 0;
+
+  const resetView = () => {
+    view.setView(DEFAULT_VIEW.lon, DEFAULT_VIEW.lat, DEFAULT_VIEW.z);
+    staticDirty = true;
+  };
+  canvas.addEventListener("dblclick", resetView);
+
+  // pointer gestures: one finger/mouse pans, two fingers pinch-zoom,
+  // a quick double-tap resets (touch equivalent of double-click)
+  const pointers = new Map<number, { x: number; y: number }>();
+  let gestureMoved = false;
+  let gesturePinched = false;
+  let lastTap = { t: 0, x: 0, y: 0 };
   canvas.addEventListener("pointerdown", (e) => {
-    dragging = true;
-    lastX = e.clientX;
-    lastY = e.clientY;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     canvas.setPointerCapture(e.pointerId);
+    if (pointers.size === 1) gestureMoved = false;
+    else gesturePinched = true;
     canvas.style.cursor = "grabbing";
   });
   canvas.addEventListener("pointermove", (e) => {
-    if (!dragging) return;
-    view.panBy(e.clientX - lastX, e.clientY - lastY);
-    lastX = e.clientX;
-    lastY = e.clientY;
-    staticDirty = true;
+    const p = pointers.get(e.pointerId);
+    if (!p) return;
+    if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 0) {
+      if (pointers.size === 1) {
+        view.panBy(e.clientX - p.x, e.clientY - p.y);
+        staticDirty = true;
+      } else {
+        // pinch: pan with the midpoint, zoom with the finger spread
+        const o = [...pointers.entries()].find(([id]) => id !== e.pointerId)?.[1];
+        if (o) {
+          const oldDist = Math.hypot(p.x - o.x, p.y - o.y);
+          const newMidX = (e.clientX + o.x) / 2;
+          const newMidY = (e.clientY + o.y) / 2;
+          view.panBy(newMidX - (p.x + o.x) / 2, newMidY - (p.y + o.y) / 2);
+          const newDist = Math.hypot(e.clientX - o.x, e.clientY - o.y);
+          if (oldDist > 1) view.zoomAt(newMidX, newMidY, newDist / oldDist);
+          staticDirty = true;
+        }
+      }
+      if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 1.5) gestureMoved = true;
+      p.x = e.clientX;
+      p.y = e.clientY;
+    }
   });
-  canvas.addEventListener("pointerup", (e) => {
-    dragging = false;
+  const endPointer = (e: PointerEvent) => {
+    pointers.delete(e.pointerId);
     canvas.releasePointerCapture(e.pointerId);
-    canvas.style.cursor = "grab";
-  });
-  canvas.addEventListener("dblclick", () => {
-    view.setView(DEFAULT_VIEW.lon, DEFAULT_VIEW.lat, DEFAULT_VIEW.z);
-    staticDirty = true;
-  });
+    if (pointers.size === 0) {
+      canvas.style.cursor = "grab";
+      // double-tap reset for touch (dblclick doesn't fire there)
+      if (e.type === "pointerup" && e.pointerType === "touch" && !gestureMoved && !gesturePinched) {
+        const now = performance.now();
+        if (now - lastTap.t < 350 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 40) {
+          resetView();
+          lastTap.t = 0;
+        } else {
+          lastTap = { t: now, x: e.clientX, y: e.clientY };
+        }
+      }
+      gesturePinched = false;
+    }
+  };
+  canvas.addEventListener("pointerup", endPointer);
+  canvas.addEventListener("pointercancel", endPointer);
+
+  // touch devices get touch wording in the HUD
+  if (matchMedia("(pointer: coarse)").matches) {
+    document.getElementById("hint")!.textContent =
+      "pinch to zoom · drag to pan · double-tap to reset";
+  }
 
   const trains = new Map<string, LiveTrain>();
   let lastUpdate = 0;
@@ -390,6 +439,7 @@ async function main() {
   );
   staticDirty = true;
   window.addEventListener("resize", layout);
+  window.visualViewport?.addEventListener("resize", layout);
   await poll();
   setInterval(poll, POLL_MS);
   requestAnimationFrame(frame);

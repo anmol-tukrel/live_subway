@@ -2,7 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#eceef0" />
     <title>NYC Live Subway</title>
     <style>
       html,
@@ -16,8 +20,12 @@
         display: block;
         width: 100vw;
         height: 100vh;
+        height: 100dvh; /* mobile: track the dynamic viewport (URL bar) */
         cursor: grab;
         touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
       }
       :root {
         --hud-text: #8b94a0;
@@ -39,8 +47,8 @@
       }
       #hud {
         position: fixed;
-        left: 16px;
-        bottom: 14px;
+        left: calc(16px + env(safe-area-inset-left));
+        bottom: calc(14px + env(safe-area-inset-bottom));
         color: var(--hud-text);
         font: 12px/1.4 ui-monospace, "SF Mono", Menlo, monospace;
         user-select: none;
@@ -53,8 +61,8 @@
       }
       #zoomctl {
         position: fixed;
-        right: 16px;
-        bottom: 16px;
+        right: calc(16px + env(safe-area-inset-right));
+        bottom: calc(16px + env(safe-area-inset-bottom));
         display: flex;
         flex-direction: column;
         background: var(--ctl-bg);
@@ -81,8 +89,8 @@
       }
       #themectl {
         position: fixed;
-        right: 16px;
-        bottom: 104px;
+        right: calc(16px + env(safe-area-inset-right));
+        bottom: calc(104px + env(safe-area-inset-bottom));
         display: flex;
         background: var(--ctl-bg);
         border: 1px solid var(--ctl-border);
@@ -111,6 +119,24 @@
       #themectl button + button {
         border-left: 1px solid var(--ctl-border);
       }
+      /* touch devices: bigger targets, tighter HUD */
+      @media (pointer: coarse) {
+        #zoomctl button {
+          width: 46px;
+          height: 44px;
+        }
+        #themectl {
+          bottom: calc(122px + env(safe-area-inset-bottom));
+        }
+        #themectl button {
+          padding: 13px 14px;
+          font-size: 12px;
+        }
+        #hud {
+          font-size: 11px;
+          max-width: calc(100vw - 110px);
+        }
+      }
     </style>
   </head>
   <body>
@@ -127,7 +153,7 @@
     <div id="hud">
       <span class="title">NYC Subway · Live</span><br />
       <span id="status">connecting…</span><br />
-      <span style="opacity: 0.55">scroll to zoom · drag to pan · double-click to reset</span><br />
+      <span style="opacity: 0.55" id="hint">scroll to zoom · drag to pan · double-click to reset</span><br />
       <span style="opacity: 0.4" id="attribution">© OpenStreetMap © CARTO</span>
     </div>
     <script type="module" src="/src/main.ts"></script>
