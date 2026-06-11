@@ -367,8 +367,8 @@ async function main() {
     return lonLatToWorld(lon, lat);
   }
 
-  // SoHo / West Village / Chelsea / Midtown — where the flyby should happen
-  const INTRO_BOX = { minLon: -74.02, maxLon: -73.97, minLat: 40.71, maxLat: 40.77 };
+  // the City Hall pocket (WTC / Fulton / Park Row) where all the lines cross
+  const INTRO_BOX = { minLon: -74.016, maxLon: -73.998, minLat: 40.704, maxLat: 40.716 };
 
   /** Fastest moving train in the intro box (fallback: nearest-ish fast train). */
   function pickIntroTrain(): string | null {
