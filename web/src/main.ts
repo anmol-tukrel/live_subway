@@ -367,12 +367,17 @@ async function main() {
     return lonLatToWorld(lon, lat);
   }
 
-  /** Fast-moving on-shape train near the default framing — the flyby star. */
+  // SoHo / West Village / Chelsea / Midtown — where the flyby should happen
+  const INTRO_BOX = { minLon: -74.02, maxLon: -73.97, minLat: 40.71, maxLat: 40.77 };
+
+  /** Fastest moving train in the intro box (fallback: nearest-ish fast train). */
   function pickIntroTrain(): string | null {
     const now = Date.now() / 1000;
     const dv = defaultView();
-    let bestId: string | null = null;
-    let bestScore = -Infinity;
+    let bestInBox: string | null = null;
+    let bestInBoxSpeed = -Infinity;
+    let fallback: string | null = null;
+    let fallbackScore = -Infinity;
     for (const [id, t] of trains) {
       const st = t.state;
       if (st.status !== "MOVING" || !st.shapeId) continue;
@@ -386,17 +391,29 @@ async function main() {
       if (speed < 6 || speed > MAX_SPEED) continue;
       const f = Math.max(0, Math.min(1, (now - st.depTime) / (st.arrTime - st.depTime)));
       const [lon, lat] = pointAtDist(sh.points, sh.cum, d0 + (d1 - d0) * f);
-      const km = Math.hypot(
-        (lon - dv.lon) * 111.32 * Math.cos((dv.lat * Math.PI) / 180),
-        (lat - dv.lat) * 110.57
-      );
-      const score = speed - km * 1.5;
-      if (score > bestScore) {
-        bestScore = score;
-        bestId = id;
+      if (
+        lon >= INTRO_BOX.minLon &&
+        lon <= INTRO_BOX.maxLon &&
+        lat >= INTRO_BOX.minLat &&
+        lat <= INTRO_BOX.maxLat
+      ) {
+        if (speed > bestInBoxSpeed) {
+          bestInBoxSpeed = speed;
+          bestInBox = id;
+        }
+      } else {
+        const km = Math.hypot(
+          (lon - dv.lon) * 111.32 * Math.cos((dv.lat * Math.PI) / 180),
+          (lat - dv.lat) * 110.57
+        );
+        const score = speed - km * 1.5;
+        if (score > fallbackScore) {
+          fallbackScore = score;
+          fallback = id;
+        }
       }
     }
-    return bestId;
+    return bestInBox ?? fallback;
   }
 
   const easeInOut = (f: number) =>
