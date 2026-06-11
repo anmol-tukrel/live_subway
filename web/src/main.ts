@@ -44,6 +44,40 @@ const canvas = document.getElementById("map") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
 const statusEl = document.getElementById("status")!;
 
+// --- train marker: a top-down subway car, drawn as vector art once per
+// route color into an offscreen sprite, then stamped rotated per train ---
+const SPRITE_W = 132;
+const SPRITE_H = 64;
+const spriteCache = new Map<string, HTMLCanvasElement>();
+function trainSprite(color: string): HTMLCanvasElement {
+  let c = spriteCache.get(color);
+  if (c) return c;
+  c = document.createElement("canvas");
+  c.width = SPRITE_W;
+  c.height = SPRITE_H;
+  const g = c.getContext("2d")!;
+  // car body pointing right: rounded shell with a bullet nose up front
+  g.beginPath();
+  g.roundRect(6, 8, 120, 48, [14, 24, 24, 14]);
+  g.fillStyle = color;
+  g.fill();
+  g.lineWidth = 6;
+  g.strokeStyle = "rgba(255,255,255,0.92)";
+  g.stroke();
+  // side windows: dark strip along the cabin
+  g.beginPath();
+  g.roundRect(20, 20, 70, 24, 8);
+  g.fillStyle = "rgba(8, 12, 18, 0.28)";
+  g.fill();
+  // windshield near the nose
+  g.beginPath();
+  g.roundRect(100, 16, 15, 32, [5, 11, 11, 5]);
+  g.fillStyle = "rgba(8, 12, 18, 0.55)";
+  g.fill();
+  spriteCache.set(color, c);
+  return c;
+}
+
 interface LiveTrain {
   state: TrainState;
   /** shape the smoothed dist refers to; reset history when it changes */
@@ -400,15 +434,20 @@ async function main() {
     return true;
   }
 
-  /** Screen-space unit normal of the track at `dist` along a shape. */
-  function trackNormal(shape: PreparedShape, dist: number): [number, number] | undefined {
+  /** Screen-space track direction at `dist`: unit normal + heading angle. */
+  function trackFrame(
+    shape: PreparedShape,
+    dist: number
+  ): { normal: [number, number]; angle: number } | undefined {
     const a = pointAtDist(shape.points, shape.cum, Math.max(0, dist - 25));
     const b = pointAtDist(shape.points, shape.cum, dist + 25);
     const [ax, ay] = view.project(a[0], a[1]);
     const [bx, by] = view.project(b[0], b[1]);
-    const len = Math.hypot(bx - ax, by - ay);
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len = Math.hypot(dx, dy);
     if (len < 1e-6) return undefined;
-    return [-(by - ay) / len, (bx - ax) / len];
+    return { normal: [-dy / len, dx / len], angle: Math.atan2(dy, dx) };
   }
 
   let prevFrame = performance.now();
@@ -442,6 +481,7 @@ async function main() {
 
       let head: [number, number];
       let trailPts: [number, number][] | null = null;
+      let heading: number | null = null;
 
       if (target.shape) {
         const sh = target.shape;
@@ -477,7 +517,9 @@ async function main() {
           t.distHist.shift();
         }
 
-        const normal = trackNormal(sh, t.dist);
+        const frame = trackFrame(sh, t.dist);
+        const normal = frame?.normal;
+        heading = frame?.angle ?? null;
         const headPos = pointAtDist(sh.points, sh.cum, t.dist);
         const tailDist = t.distHist.length
           ? Math.min(t.distHist[0].dist, t.dist)
@@ -529,16 +571,30 @@ async function main() {
         }
       }
 
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 6;
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(head[0], head[1], dotR, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = "rgba(255,255,255,0.9)";
-      ctx.lineWidth = Math.max(0.8, dotR * 0.3);
-      ctx.stroke();
+      if (heading != null) {
+        // subway car aligned with the track, nose pointing down-line
+        const L = dotR * 4.6;
+        const W = L * (SPRITE_H / SPRITE_W);
+        ctx.save();
+        ctx.translate(head[0], head[1]);
+        ctx.rotate(heading);
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 6;
+        ctx.drawImage(trainSprite(color), -L / 2, -W / 2, L, W);
+        ctx.restore();
+      } else {
+        // shapeless fallback trains have no heading; keep the dot
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 6;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(head[0], head[1], dotR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = "rgba(255,255,255,0.9)";
+        ctx.lineWidth = Math.max(0.8, dotR * 0.3);
+        ctx.stroke();
+      }
     }
 
     const age = lastUpdate ? Math.round((wallNow - lastUpdate) / 1000) : null;
