@@ -367,9 +367,25 @@ async function main() {
     return lonLatToWorld(lon, lat);
   }
 
-  // the Midtown pocket (Penn / Times Sq / Bryant Park / Herald Sq) where the
-  // 8th/7th/Broadway/6th Ave trunks and the 7 + shuttle all cross
-  const INTRO_BOX = { minLon: -74.0, maxLon: -73.975, minLat: 40.744, maxLat: 40.762 };
+  // flyby pockets, selectable via ?pocket= for staging shots.
+  // default: the City Hall knot, where lines curve and cross (and trains
+  // funnel toward the river crossings).
+  type Box = { minLon: number; maxLon: number; minLat: number; maxLat: number };
+  const INTRO_POCKETS: Record<string, Box[]> = {
+    cityhall: [{ minLon: -74.016, maxLon: -73.998, minLat: 40.704, maxLat: 40.716 }],
+    midtown: [{ minLon: -74.0, maxLon: -73.975, minLat: 40.744, maxLat: 40.762 }],
+    bridge: [
+      // Manhattan Bridge (B/D/N/Q over the East River)
+      { minLon: -73.996, maxLon: -73.975, minLat: 40.697, maxLat: 40.712 },
+      // Williamsburg Bridge (J/M/Z)
+      { minLon: -73.988, maxLon: -73.96, minLat: 40.708, maxLat: 40.716 },
+    ],
+  };
+  let introPocket = "cityhall";
+  const inIntroPocket = (lon: number, lat: number) =>
+    (INTRO_POCKETS[introPocket] ?? INTRO_POCKETS.cityhall).some(
+      (b) => lon >= b.minLon && lon <= b.maxLon && lat >= b.minLat && lat <= b.maxLat
+    );
 
   /** Fastest moving train in the intro box (fallback: nearest-ish fast train). */
   function pickIntroTrain(): string | null {
@@ -392,12 +408,7 @@ async function main() {
       if (speed < 6 || speed > MAX_SPEED) continue;
       const f = Math.max(0, Math.min(1, (now - st.depTime) / (st.arrTime - st.depTime)));
       const [lon, lat] = pointAtDist(sh.points, sh.cum, d0 + (d1 - d0) * f);
-      if (
-        lon >= INTRO_BOX.minLon &&
-        lon <= INTRO_BOX.maxLon &&
-        lat >= INTRO_BOX.minLat &&
-        lat <= INTRO_BOX.maxLat
-      ) {
+      if (inIntroPocket(lon, lat)) {
         if (speed > bestInBoxSpeed) {
           bestInBoxSpeed = speed;
           bestInBox = id;
@@ -633,6 +644,7 @@ async function main() {
   requestAnimationFrame(frame);
 
   // intro flyby on plain loads (no explicit view in the URL, ?intro=0 opts out)
+  introPocket = params.get("pocket") ?? "cityhall";
   if (!params.get("lon") && !params.get("lat") && !params.get("z") && params.get("intro") !== "0") {
     introPending = true;
     setTimeout(() => {
