@@ -44,35 +44,35 @@ const canvas = document.getElementById("map") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
 const statusEl = document.getElementById("status")!;
 
-// --- train marker: a top-down subway car, drawn as vector art once per
-// route color into an offscreen sprite, then stamped rotated per train ---
-const SPRITE_W = 132;
-const SPRITE_H = 64;
+// --- train marker: classic front-view subway glyph (rounded body, two
+// windows, two headlights), drawn as vector art once per route color ---
+const SPRITE_S = 96;
 const spriteCache = new Map<string, HTMLCanvasElement>();
 function trainSprite(color: string): HTMLCanvasElement {
   let c = spriteCache.get(color);
   if (c) return c;
   c = document.createElement("canvas");
-  c.width = SPRITE_W;
-  c.height = SPRITE_H;
+  c.width = SPRITE_S;
+  c.height = SPRITE_S;
   const g = c.getContext("2d")!;
-  // car body pointing right: rounded shell with a bullet nose up front
+  // body: big-shouldered top, gently rounded bottom
   g.beginPath();
-  g.roundRect(6, 8, 120, 48, [14, 24, 24, 14]);
+  g.roundRect(14, 8, 68, 80, [26, 26, 14, 14]);
   g.fillStyle = color;
   g.fill();
   g.lineWidth = 6;
   g.strokeStyle = "rgba(255,255,255,0.92)";
   g.stroke();
-  // side windows: dark strip along the cabin
+  // two cab windows
+  g.fillStyle = "rgba(255,255,255,0.94)";
   g.beginPath();
-  g.roundRect(20, 20, 70, 24, 8);
-  g.fillStyle = "rgba(8, 12, 18, 0.28)";
+  g.roundRect(26, 26, 19, 22, 4);
+  g.roundRect(51, 26, 19, 22, 4);
   g.fill();
-  // windshield near the nose
+  // headlights
   g.beginPath();
-  g.roundRect(100, 16, 15, 32, [5, 11, 11, 5]);
-  g.fillStyle = "rgba(8, 12, 18, 0.55)";
+  g.arc(33, 68, 6, 0, Math.PI * 2);
+  g.arc(63, 68, 6, 0, Math.PI * 2);
   g.fill();
   spriteCache.set(color, c);
   return c;
@@ -434,11 +434,8 @@ async function main() {
     return true;
   }
 
-  /** Screen-space track direction at `dist`: unit normal + heading angle. */
-  function trackFrame(
-    shape: PreparedShape,
-    dist: number
-  ): { normal: [number, number]; angle: number } | undefined {
+  /** Screen-space unit normal of the track at `dist` along a shape. */
+  function trackNormal(shape: PreparedShape, dist: number): [number, number] | undefined {
     const a = pointAtDist(shape.points, shape.cum, Math.max(0, dist - 25));
     const b = pointAtDist(shape.points, shape.cum, dist + 25);
     const [ax, ay] = view.project(a[0], a[1]);
@@ -447,7 +444,7 @@ async function main() {
     const dy = by - ay;
     const len = Math.hypot(dx, dy);
     if (len < 1e-6) return undefined;
-    return { normal: [-dy / len, dx / len], angle: Math.atan2(dy, dx) };
+    return [-dy / len, dx / len];
   }
 
   let prevFrame = performance.now();
@@ -481,7 +478,6 @@ async function main() {
 
       let head: [number, number];
       let trailPts: [number, number][] | null = null;
-      let heading: number | null = null;
 
       if (target.shape) {
         const sh = target.shape;
@@ -517,9 +513,7 @@ async function main() {
           t.distHist.shift();
         }
 
-        const frame = trackFrame(sh, t.dist);
-        const normal = frame?.normal;
-        heading = frame?.angle ?? null;
+        const normal = trackNormal(sh, t.dist);
         const headPos = pointAtDist(sh.points, sh.cum, t.dist);
         const tailDist = t.distHist.length
           ? Math.min(t.distHist[0].dist, t.dist)
@@ -571,30 +565,12 @@ async function main() {
         }
       }
 
-      if (heading != null) {
-        // subway car aligned with the track, nose pointing down-line
-        const L = dotR * 4.6;
-        const W = L * (SPRITE_H / SPRITE_W);
-        ctx.save();
-        ctx.translate(head[0], head[1]);
-        ctx.rotate(heading);
-        ctx.shadowColor = color;
-        ctx.shadowBlur = 6;
-        ctx.drawImage(trainSprite(color), -L / 2, -W / 2, L, W);
-        ctx.restore();
-      } else {
-        // shapeless fallback trains have no heading; keep the dot
-        ctx.shadowColor = color;
-        ctx.shadowBlur = 6;
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(head[0], head[1], dotR, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = "rgba(255,255,255,0.9)";
-        ctx.lineWidth = Math.max(0.8, dotR * 0.3);
-        ctx.stroke();
-      }
+      // front-view subway glyph, always upright (the trail shows direction)
+      const S = dotR * 3.1;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 6;
+      ctx.drawImage(trainSprite(color), head[0] - S / 2, head[1] - S / 2, S, S);
+      ctx.shadowBlur = 0;
     }
 
     const age = lastUpdate ? Math.round((wallNow - lastUpdate) / 1000) : null;
