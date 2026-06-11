@@ -6,6 +6,7 @@ import {
   THEMES,
   TileLayer,
   laneSpacingPx,
+  lonLatToWorld,
   offsetPolylinePx,
   prepareShapes,
   renderStatic,
@@ -22,8 +23,14 @@ const defaultView = () =>
 
 const POLL_MS = 30_000; // MTA publishes ~every 30s; we fetch the feeds directly
 const SMOOTHING = 2.5; // 1/s; position easing for shapeless fallback trains
-const TRAIL_MAX_AGE_MS = 45_000;
+const TRAIL_MAX_AGE_MS = 75_000;
 const TRAIL_SAMPLE_MS = 1_000;
+
+// intro flyby: zoom to a fast-moving train, ride along, pull back out
+const INTRO_DELAY_MS = 1_500;
+const INTRO_FLY_MS = 3_000;
+const INTRO_FOLLOW_MS = 6_000;
+const INTRO_FOLLOW_ZOOM = 36;
 
 // velocity model: v chases (segment speed + error feedback), so prediction
 // jumps become gentle sustained speed changes instead of catch-up sprints
@@ -130,6 +137,7 @@ async function main() {
     "wheel",
     (e) => {
       e.preventDefault();
+      cancelIntro();
       // trackpad pinch arrives as ctrl+wheel with small deltas
       const k = e.ctrlKey ? 0.014 : 0.0035;
       view.zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * k));
@@ -137,7 +145,21 @@ async function main() {
     },
     { passive: false }
   );
+  // intro flyby camera state; any user interaction cancels it
+  let intro: {
+    phase: "flyIn" | "follow" | "flyOut";
+    t0: number;
+    trainId: string;
+    from: { cx: number; cy: number; z: number };
+  } | null = null;
+  let introPending = false;
+  const cancelIntro = () => {
+    intro = null;
+    introPending = false;
+  };
+
   const zoomStep = (factor: number) => {
+    cancelIntro();
     view.zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, factor);
     staticDirty = true;
   };
@@ -145,6 +167,7 @@ async function main() {
   document.getElementById("zoom-out")!.addEventListener("click", () => zoomStep(1 / 1.6));
 
   const resetView = () => {
+    cancelIntro();
     const dv = defaultView();
     view.setView(dv.lon, dv.lat, dv.z);
     staticDirty = true;
@@ -158,6 +181,7 @@ async function main() {
   let gesturePinched = false;
   let lastTap = { t: 0, x: 0, y: 0 };
   canvas.addEventListener("pointerdown", (e) => {
+    cancelIntro();
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     canvas.setPointerCapture(e.pointerId);
     if (pointers.size === 1) gestureMoved = false;
@@ -288,6 +312,94 @@ async function main() {
     };
   }
 
+  /** Current world position of a live train (from its smoothed track distance). */
+  function trainWorld(id: string): [number, number] | null {
+    const t = trains.get(id);
+    if (!t?.shapeKey || t.dist == null) return null;
+    const sh = shapes.get(t.shapeKey);
+    if (!sh) return null;
+    const [lon, lat] = pointAtDist(sh.points, sh.cum, t.dist);
+    return lonLatToWorld(lon, lat);
+  }
+
+  /** Fast-moving on-shape train near the default framing — the flyby star. */
+  function pickIntroTrain(): string | null {
+    const now = Date.now() / 1000;
+    const dv = defaultView();
+    let bestId: string | null = null;
+    let bestScore = -Infinity;
+    for (const [id, t] of trains) {
+      const st = t.state;
+      if (st.status !== "MOVING" || !st.shapeId) continue;
+      const sh = shapes.get(st.shapeId) as PreparedShape | undefined;
+      if (!sh) continue;
+      const d0 = sh.stopDist[st.prevStop];
+      const d1 = sh.stopDist[st.nextStop];
+      if (d0 == null || d1 == null || st.arrTime <= st.depTime) continue;
+      if (st.arrTime - now < 12) continue; // would park mid-shot
+      const speed = (d1 - d0) / (st.arrTime - st.depTime);
+      if (speed < 6 || speed > MAX_SPEED) continue;
+      const f = Math.max(0, Math.min(1, (now - st.depTime) / (st.arrTime - st.depTime)));
+      const [lon, lat] = pointAtDist(sh.points, sh.cum, d0 + (d1 - d0) * f);
+      const km = Math.hypot(
+        (lon - dv.lon) * 111.32 * Math.cos((dv.lat * Math.PI) / 180),
+        (lat - dv.lat) * 110.57
+      );
+      const score = speed - km * 1.5;
+      if (score > bestScore) {
+        bestScore = score;
+        bestId = id;
+      }
+    }
+    return bestId;
+  }
+
+  const easeInOut = (f: number) =>
+    f < 0.5 ? 4 * f * f * f : 1 - Math.pow(-2 * f + 2, 3) / 2;
+
+  /** Advance the intro flyby camera; returns true while it drives the view. */
+  function updateIntro(nowMs: number): boolean {
+    if (!intro) return false;
+    if (intro.phase === "follow") {
+      const w = trainWorld(intro.trainId);
+      if (!w || nowMs - intro.t0 >= INTRO_FOLLOW_MS) {
+        const [cx, cy] = view.worldCenter;
+        intro = { phase: "flyOut", t0: nowMs, trainId: intro.trainId, from: { cx, cy, z: view.zoom } };
+      } else {
+        view.setWorldView(w[0], w[1], INTRO_FOLLOW_ZOOM);
+        return true;
+      }
+    }
+    const f = Math.min(1, (nowMs - intro.t0) / INTRO_FLY_MS);
+    let toW: [number, number] | null;
+    let toZ: number;
+    if (intro.phase === "flyIn") {
+      toW = trainWorld(intro.trainId); // chase the live position
+      toZ = INTRO_FOLLOW_ZOOM;
+    } else {
+      const dv = defaultView();
+      toW = lonLatToWorld(dv.lon, dv.lat);
+      toZ = dv.z;
+    }
+    if (!toW) {
+      intro = null;
+      return false;
+    }
+    const e = easeInOut(f);
+    view.setWorldView(
+      intro.from.cx + (toW[0] - intro.from.cx) * e,
+      intro.from.cy + (toW[1] - intro.from.cy) * e,
+      intro.from.z * Math.pow(toZ / intro.from.z, e)
+    );
+    if (f >= 1) {
+      intro =
+        intro.phase === "flyIn"
+          ? { phase: "follow", t0: nowMs, trainId: intro.trainId, from: intro.from }
+          : null;
+    }
+    return true;
+  }
+
   /** Screen-space unit normal of the track at `dist` along a shape. */
   function trackNormal(shape: PreparedShape, dist: number): [number, number] | undefined {
     const a = pointAtDist(shape.points, shape.cum, Math.max(0, dist - 25));
@@ -304,6 +416,8 @@ async function main() {
     const dt = Math.min(0.1, (nowMs - prevFrame) / 1000);
     prevFrame = nowMs;
     const wallNow = Date.now();
+
+    if (updateIntro(nowMs)) staticDirty = true;
 
     if (staticDirty) {
       staticLayer = renderStatic(view, theme, tiles, shapes.values(), stations, routes);
@@ -403,11 +517,12 @@ async function main() {
       if (trailPts && trailPts.length >= 2) {
         const [tx, ty] = trailPts[0];
         if (Math.hypot(head[0] - tx, head[1] - ty) > 2) {
-          const grad = ctx.createLinearGradient(tx, ty, head[0], head[1]);
-          grad.addColorStop(0, "rgba(0,0,0,0)");
-          grad.addColorStop(1, color);
-          ctx.strokeStyle = grad;
-          ctx.lineWidth = dotR;
+        const grad = ctx.createLinearGradient(tx, ty, head[0], head[1]);
+        grad.addColorStop(0, "rgba(0,0,0,0)");
+        if (color.length === 7) grad.addColorStop(0.45, color + "66");
+        grad.addColorStop(1, color);
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = dotR * 1.25;
           ctx.beginPath();
           trailPts.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
           ctx.stroke();
@@ -449,6 +564,19 @@ async function main() {
   await poll();
   setInterval(poll, POLL_MS);
   requestAnimationFrame(frame);
+
+  // intro flyby on plain loads (no explicit view in the URL, ?intro=0 opts out)
+  if (!params.get("lon") && !params.get("lat") && !params.get("z") && params.get("intro") !== "0") {
+    introPending = true;
+    setTimeout(() => {
+      if (!introPending) return;
+      introPending = false;
+      const id = pickIntroTrain();
+      if (!id) return;
+      const [cx, cy] = view.worldCenter;
+      intro = { phase: "flyIn", t0: performance.now(), trainId: id, from: { cx, cy, z: view.zoom } };
+    }, INTRO_DELAY_MS);
+  }
 }
 
 main().catch((err) => {

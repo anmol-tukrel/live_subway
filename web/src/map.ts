@@ -12,6 +12,10 @@ function latToWorldY(lat: number): number {
   return 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI);
 }
 
+export function lonLatToWorld(lon: number, lat: number): [number, number] {
+  return [lonToWorldX(lon), latToWorldY(lat)];
+}
+
 export interface PreparedShape extends ShapeInfo {
   cum: number[];
 }
@@ -158,6 +162,17 @@ export class MapView {
     this.zoom = Math.max(0.5, Math.min(64, zoom));
     this.cx = lonToWorldX(lon);
     this.cy = latToWorldY(lat);
+    this.clampCenter();
+  }
+
+  get worldCenter(): [number, number] {
+    return [this.cx, this.cy];
+  }
+
+  setWorldView(cx: number, cy: number, zoom: number): void {
+    this.zoom = Math.max(0.5, Math.min(64, zoom));
+    this.cx = cx;
+    this.cy = cy;
     this.clampCenter();
   }
 
