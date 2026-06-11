@@ -30,7 +30,7 @@ const TRAIL_SAMPLE_MS = 1_000;
 const INTRO_DELAY_MS = 1_500;
 const INTRO_FLY_MS = 3_000;
 const INTRO_FOLLOW_MS = 6_000;
-const INTRO_FOLLOW_ZOOM = 36;
+const INTRO_FOLLOW_ZOOM = 52;
 
 // velocity model: v chases (segment speed + error feedback), so prediction
 // jumps become gentle sustained speed changes instead of catch-up sprints
